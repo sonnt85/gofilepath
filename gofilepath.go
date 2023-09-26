@@ -26,21 +26,31 @@ func Clean(path string) string {
 	return filepath.Clean(filepath.FromSlash(path))
 }
 
-//same ToSlash but process path for windows:
+func _toSlashSmart(path string) string {
+	path = sregexp.New("^/(.)\\*").ReplaceAllString(path, "${1}/*") // /C*
+	path = sregexp.New("^/(.)/").ReplaceAllString(path, "${1}/")    // /C/Users -> C/Users
+	path = sregexp.New("^(.)/").ReplaceAllString(path, "${1}:/")    //for C/ -> C:/
+	return path
+}
+
+// same ToSlash but process path for windows:
 // /C* => C/*
 // /C/Users -> C/Users
-// C/ -> C/
-func ToSlashSmart(path string, isFullPath bool) string {
+// C:/ -> C/
+func ToSlashSmart(path string, isFullPaths ...bool) string {
+	isFullPath := false
+	if len(isFullPaths) != 0 {
+		isFullPath = isFullPaths[0]
+	}
 	if runtime.GOOS == "windows" && strings.Contains(path, "/") {
-		if isFullPath {
-			path = sregexp.New("^/(.)\\*").ReplaceAllString(path, "${1}/*") // /C*
-			path = sregexp.New("^/(.)/").ReplaceAllString(path, "${1}/")    // /C/Users -> C/Users
-			path = sregexp.New("^(.)/").ReplaceAllString(path, "${1}:/")    //for C/ -> C:/
+		if isFullPath || strings.HasPrefix(path, "/") {
+			path = _toSlashSmart(path)
 		}
 		// path = sregexp.New("^(.):/").ReplaceAllString(path, "${1}/")     //for C:/ -> C/
 		// return path
 	}
-	return filepath.FromSlash(path)
+	// return filepath.FromSlash(path)
+	return filepath.ToSlash(path)
 }
 
 // ToSlash returns the result of replacing each separator character
@@ -256,12 +266,89 @@ func (d *StatDirEntry) IsDir() bool                { return d.info.IsDir() }
 func (d *StatDirEntry) Type() fs.FileMode          { return d.info.Mode().Type() }
 func (d *StatDirEntry) Info() (fs.FileInfo, error) { return d.info, nil }
 
-// maxdeep: 0 ->
+func isSymlinkToDir(path string, d fs.DirEntry) bool {
+	if (d.Type() & os.ModeSymlink) == 0 {
+		return false
+	}
+
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+
+	info, err := os.Stat(realPath)
+	if err != nil {
+		return false
+	}
+
+	return info.IsDir()
+}
+
+func isSymlinkToFile(path string, d fs.DirEntry) bool {
+	if (d.Type() & os.ModeSymlink) == 0 {
+		return false
+	}
+
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+
+	info, err := os.Stat(realPath)
+	if err != nil {
+		return false
+	}
+
+	return !info.IsDir()
+}
+
+func isSymlinkToDirectory(path string) (bool, error) {
+	fileInfo, err := os.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+	if fileInfo.Mode()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+
+	targetPath, err := os.Readlink(path)
+	if err != nil {
+		return false, err
+	}
+
+	targetFileInfo, err := os.Stat(targetPath)
+	if err != nil {
+		return false, err
+	}
+
+	return targetFileInfo.IsDir(), nil
+}
+
+// func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, warkdirs ...WarkdirFunc) (matches []string) {
+// FindFilesMatchPathFromRoot finds files and directories that match a specified pattern
+// within a given root directory and up to a maximum depth (valid from 0).
+//
+// Parameters:
+//   - root: The starting directory path from which the search begins.
+//   - pattern: The pattern used for matching file and directory paths.
+//   - maxdeep: The maximum depth (distance from the root) to search for matching files and directories.
+//     A value of 0 means only the root directory will be considered.
+//   - matchfile: Set to true to include matching files in the results.
+//   - matchdir: Set to true to include matching directories in the results.
+//   - matchFunc: A function that takes a pattern and a relative path as arguments and returns true if the path matches the pattern.
+//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//
+// Returns:
+//   - matches: A slice of strings containing the paths of the matching files and directories.
 func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, warkdirs ...WarkdirFunc) (matches []string) {
+
 	matches = make([]string, 0)
 	if matchFunc == nil {
 		return
 	}
+	// if ok, _ := isSymlinkToDirectory(root); ok && !strings.HasSuffix(root, string(os.PathSeparator)) {
+	// 	root += string(os.PathSeparator)
+	// }
 	rootPath := filepath.FromSlash(root)
 	if finfo, err := os.Stat(root); err == nil {
 		if !finfo.IsDir() { //is file
@@ -283,32 +370,39 @@ func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, ma
 			// return err
 			return nil
 		}
+
 		relpath, err = filepath.Rel(rootPath, path)
 		if err != nil {
 			return nil
 		}
-		if maxdeep > -1 {
+		if maxdeep >= 0 {
 			deep = strings.Count(relpath, string(os.PathSeparator))
 			if deep > maxdeep {
 				if d.IsDir() {
-					return fs.SkipDir
+					return filepath.SkipDir
 				} else {
 					return nil
 				}
 			}
 		}
-		if (d.IsDir() && matchdir) || (!d.IsDir() && matchfile) {
-			// fmt.Printf("Test..'%s' <-> '%s'\n", pattern, relpath)
-			// if matchFunc == nil {
-			// 	matchFunc = func(pattern, relpath string) bool {
-			// 		if match, err := filepath.Match(pattern, filepath.Base(relpath)); err == nil && match {
-			// 			return true
-			// 		}
-			// 		return false
-			// 	}
-			// }
+		if (matchdir && (d.IsDir() || isSymlinkToDir(path, d))) || (matchfile && (!d.IsDir() || isSymlinkToFile(path, d))) {
 			if matchFunc(pattern, relpath) {
 				matches = append(matches, path)
+			}
+			if isSymlinkToDir(path, d) {
+				newMaxdeep := maxdeep
+				if maxdeep >= 1 {
+					newMaxdeep = maxdeep - deep - 1
+					if newMaxdeep < 0 {
+						return nil
+					}
+				}
+
+				newRoot := path + string(os.PathSeparator)
+				if submatches := FindFilesMatchPathFromRoot(newRoot, pattern, newMaxdeep, matchfile, matchdir, matchFunc, warkdir); len(submatches) != 0 {
+					matches = append(matches, submatches...)
+				}
+				return nil
 			}
 		}
 		return nil
@@ -318,6 +412,20 @@ func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, ma
 	return matches
 }
 
+// FindFilesMatchRegexpPathFromRoot finds files and directories that match a regular expression pattern
+// starting from the specified root directory and considering a maximum depth (valid from 0).
+//
+// Parameters:
+//   - root: The starting directory path from which the search begins.
+//   - pattern: The regular expression pattern used for matching file and directory names.
+//   - maxdeep: The maximum depth (distance from the root) to search for matching files and directories.
+//     A value of 0 means only the root directory will be considered.
+//   - matchfile: Set to true to include matching files in the results.
+//   - matchdir: Set to true to include matching directories in the results.
+//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//
+// Returns:
+//   - matches: A slice of strings containing the paths of the matching files and directories.
 func FindFilesMatchRegexpPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		return sregexp.New(pattern).MatchString(relpath)
@@ -325,6 +433,20 @@ func FindFilesMatchRegexpPathFromRoot(root, pattern string, maxdeep int, matchfi
 	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, warkdirs...)
 }
 
+// FindFilesMatchRegexpName finds files and directories that match a regular expression pattern
+// by considering their names within a specified root directory and within a maximum depth (valid from 0).
+//
+// Parameters:
+//   - root: The starting directory path from which the search begins.
+//   - pattern: The regular expression pattern used for matching file and directory names.
+//   - maxdeep: The maximum depth (distance from the root) to search for matching files and directories.
+//     A value of 0 means only the root directory will be considered.
+//   - matchfile: Set to true to include matching files in the results.
+//   - matchdir: Set to true to include matching directories in the results.
+//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//
+// Returns:
+//   - matches: A slice of strings containing the paths of the matching files and directories.
 func FindFilesMatchRegexpName(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		return sregexp.New(pattern).MatchString(filepath.Base(relpath))
@@ -332,6 +454,20 @@ func FindFilesMatchRegexpName(root, pattern string, maxdeep int, matchfile, matc
 	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, warkdirs...)
 }
 
+// FindFilesMatchName finds files and directories whose names match the specified pattern
+// within a given root directory and up to a maximum depth (valid from 0).
+//
+// Parameters:
+//   - root: The starting directory path from which the search begins.
+//   - pattern: The pattern used for matching file and directory names.
+//   - maxdeep: The maximum depth (distance from the root) to search for matching files and directories.
+//     A value of 0 means only the root directory will be considered.
+//   - matchfile: Set to true to include matching files in the results.
+//   - matchdir: Set to true to include matching directories in the results.
+//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//
+// Returns:
+//   - matches: A slice of strings containing the paths of the matching files and directories.
 func FindFilesMatchName(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		if match, err := filepath.Match(pattern, filepath.Base(relpath)); err == nil && match {
@@ -385,4 +521,8 @@ func Cat(files ...string) (contents string, err error) {
 		}
 	}
 	return
+}
+
+func BaseNoExt(fpath string) string {
+	return strings.TrimSuffix(Base(fpath), Ext(fpath))
 }
