@@ -13,7 +13,6 @@ package gofilepath
 
 import (
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -484,7 +483,7 @@ func GetDrives() ([]string, error) {
 
 func TempFileCreateWithContent(data []byte, filename ...string) (fpath string) {
 	if len(filename) != 0 && len(filename[0]) != 0 { //has name
-		wdir, err := ioutil.TempDir("", "systempath")
+		wdir, err := os.MkdirTemp("", "systempath")
 		if err != nil {
 			return
 		}
@@ -498,7 +497,7 @@ func TempFileCreateWithContent(data []byte, filename ...string) (fpath string) {
 			f.Close()
 		}
 	} else {
-		if f, err := ioutil.TempFile("", ""); err == nil {
+		if f, err := os.CreateTemp("", ""); err == nil {
 			fpath = f.Name()
 			f.Close()
 		}
