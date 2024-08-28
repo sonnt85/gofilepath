@@ -1,6 +1,7 @@
 package gofilepath
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -163,7 +164,7 @@ func FirstExistPath(path string) string {
 
 func GetPathInPaths(pathToCheck, paths string) string {
 	for _, p := range strings.Split(paths, string(os.PathListSeparator)) {
-		if b, _ := PathIsChildOf(pathToCheck, paths); b {
+		if b, _ := PathIsChildOf(pathToCheck, p); b {
 			return p
 		}
 	}
@@ -178,4 +179,28 @@ func PathHasSubpath(subpath, PATH string) bool {
 		}
 	}
 	return false
+}
+
+func PathsPointToSameFile(path1, path2 string) (bool, error) {
+	realPath1, err := filepath.EvalSymlinks(path1)
+	if err != nil {
+		return false, fmt.Errorf("error resolving symlink for %s: %w", path1, err)
+	}
+
+	realPath2, err := filepath.EvalSymlinks(path2)
+	if err != nil {
+		return false, fmt.Errorf("error resolving symlink for %s: %w", path2, err)
+	}
+
+	info1, err := os.Lstat(realPath1)
+	if err != nil {
+		return false, fmt.Errorf("error getting file info for %s: %w", realPath1, err)
+	}
+
+	info2, err := os.Lstat(realPath2)
+	if err != nil {
+		return false, fmt.Errorf("error getting file info for %s: %w", realPath2, err)
+	}
+
+	return os.SameFile(info1, info2), nil
 }

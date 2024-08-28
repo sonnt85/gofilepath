@@ -323,6 +323,14 @@ func isSymlinkToDirectory(path string) (bool, error) {
 	return targetFileInfo.IsDir(), nil
 }
 
+// func IsSymlink(filename string) (bool, error) {
+// 	fileInfo, err := os.Lstat(filename)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink, nil
+// }
+
 // func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, warkdirs ...WarkdirFunc) (matches []string) {
 // FindFilesMatchPathFromRoot finds files and directories that match a specified pattern
 // within a given root directory and up to a maximum depth (valid from 0).
@@ -524,4 +532,88 @@ func Cat(files ...string) (contents string, err error) {
 
 func BaseNoExt(fpath string) string {
 	return strings.TrimSuffix(Base(fpath), Ext(fpath))
+}
+
+func PathIsExist(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
+}
+
+func PathIsDir(path string) bool {
+	if PathIsSymlink(path) {
+		return false
+	}
+	if finfo, err := os.Stat(path); err == nil {
+		if finfo.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func PathIsDirOrLinkToDir(path string) bool {
+	if PathIsDir(path) {
+		return true
+	}
+	return PathIsSymlinkDir(path)
+}
+
+func PathIsFile(path string) bool {
+	if PathIsSymlink(path) {
+		return false
+	}
+	if finfo, err := os.Stat(path); err == nil {
+		if !finfo.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func PathIsFileOrLinkToFile(path string) bool {
+	if PathIsFile(path) {
+		return true
+	}
+	return PathIsSymlinkFile(path)
+}
+
+func PathIsSymlink(filename string) bool {
+	fileInfo, err := os.Lstat(filename)
+	if err != nil {
+		return false
+	}
+
+	return fileInfo.Mode()&os.ModeSymlink != 0
+}
+
+func PathIsSymlinkDir(path string) bool {
+	isSymlink := PathIsSymlink(path)
+
+	if !isSymlink {
+		return false
+	}
+
+	targetInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return targetInfo.IsDir()
+}
+
+func PathIsSymlinkFile(path string) bool {
+	isSymlink := PathIsSymlink(path)
+
+	if !isSymlink {
+		return false
+	}
+
+	targetInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return !targetInfo.IsDir()
 }
