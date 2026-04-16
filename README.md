@@ -1,5 +1,7 @@
 # gofilepath
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sonnt85/gofilepath.svg)](https://pkg.go.dev/github.com/sonnt85/gofilepath)
+
 Drop-in replacement for Go's `path/filepath` that works correctly with **cross-platform paths**.
 
 ## The Problem
