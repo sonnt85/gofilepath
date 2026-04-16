@@ -254,7 +254,11 @@ func VolumeName(path string) string {
 // 	return filepath.Match(pattern, name)
 // }
 
-type WarkdirFunc func(root string, fn fs.WalkDirFunc) error
+// WalkdirFunc is a function type for custom directory walking implementations.
+type WalkdirFunc func(root string, fn fs.WalkDirFunc) error
+
+// Deprecated: Use WalkdirFunc instead.
+type WarkdirFunc = WalkdirFunc
 
 type StatDirEntry struct {
 	info fs.FileInfo
@@ -331,7 +335,7 @@ func isSymlinkToDirectory(path string) (bool, error) {
 // 	return fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink, nil
 // }
 
-// func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, warkdirs ...WarkdirFunc) (matches []string) {
+// func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, walkdirs ...WarkdirFunc) (matches []string) {
 // FindFilesMatchPathFromRoot finds files and directories that match a specified pattern
 // within a given root directory and up to a maximum depth (valid from 0).
 //
@@ -343,11 +347,11 @@ func isSymlinkToDirectory(path string) (bool, error) {
 //   - matchfile: Set to true to include matching files in the results.
 //   - matchdir: Set to true to include matching directories in the results.
 //   - matchFunc: A function that takes a pattern and a relative path as arguments and returns true if the path matches the pattern.
-//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//   - walkdirs: Optional functions that can be applied to each directory encountered during the search.
 //
 // Returns:
 //   - matches: A slice of strings containing the paths of the matching files and directories.
-func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, warkdirs ...WarkdirFunc) (matches []string) {
+func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, matchFunc func(pattern, relpath string) bool, walkdirs ...WarkdirFunc) (matches []string) {
 
 	matches = make([]string, 0)
 	if matchFunc == nil {
@@ -366,13 +370,13 @@ func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, ma
 		}
 	}
 	pattern = filepath.FromSlash(pattern)
-	warkdir := filepath.WalkDir
-	if len(warkdirs) != 0 {
-		warkdir = warkdirs[0]
+	walkdir := filepath.WalkDir
+	if len(walkdirs) != 0 {
+		walkdir = walkdirs[0]
 	}
 	var relpath string
 	var deep int
-	if nil != warkdir(rootPath, func(path string, d fs.DirEntry, err error) error {
+	if nil != walkdir(rootPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil { //signaling that Walk will not walk into this directory.
 			// return err
 			return nil
@@ -406,7 +410,7 @@ func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, ma
 				}
 
 				newRoot := path + string(os.PathSeparator)
-				if submatches := FindFilesMatchPathFromRoot(newRoot, pattern, newMaxdeep, matchfile, matchdir, matchFunc, warkdir); len(submatches) != 0 {
+				if submatches := FindFilesMatchPathFromRoot(newRoot, pattern, newMaxdeep, matchfile, matchdir, matchFunc, walkdir); len(submatches) != 0 {
 					matches = append(matches, submatches...)
 				}
 				return nil
@@ -429,15 +433,15 @@ func FindFilesMatchPathFromRoot(root, pattern string, maxdeep int, matchfile, ma
 //     A value of 0 means only the root directory will be considered.
 //   - matchfile: Set to true to include matching files in the results.
 //   - matchdir: Set to true to include matching directories in the results.
-//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//   - walkdirs: Optional functions that can be applied to each directory encountered during the search.
 //
 // Returns:
 //   - matches: A slice of strings containing the paths of the matching files and directories.
-func FindFilesMatchRegexpPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
+func FindFilesMatchRegexpPathFromRoot(root, pattern string, maxdeep int, matchfile, matchdir bool, walkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		return sregexp.New(pattern).MatchString(relpath)
 	}
-	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, warkdirs...)
+	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, walkdirs...)
 }
 
 // FindFilesMatchRegexpName finds files and directories that match a regular expression pattern
@@ -450,15 +454,15 @@ func FindFilesMatchRegexpPathFromRoot(root, pattern string, maxdeep int, matchfi
 //     A value of 0 means only the root directory will be considered.
 //   - matchfile: Set to true to include matching files in the results.
 //   - matchdir: Set to true to include matching directories in the results.
-//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//   - walkdirs: Optional functions that can be applied to each directory encountered during the search.
 //
 // Returns:
 //   - matches: A slice of strings containing the paths of the matching files and directories.
-func FindFilesMatchRegexpName(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
+func FindFilesMatchRegexpName(root, pattern string, maxdeep int, matchfile, matchdir bool, walkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		return sregexp.New(pattern).MatchString(filepath.Base(relpath))
 	}
-	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, warkdirs...)
+	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, walkdirs...)
 }
 
 // FindFilesMatchName finds files and directories whose names match the specified pattern
@@ -471,18 +475,18 @@ func FindFilesMatchRegexpName(root, pattern string, maxdeep int, matchfile, matc
 //     A value of 0 means only the root directory will be considered.
 //   - matchfile: Set to true to include matching files in the results.
 //   - matchdir: Set to true to include matching directories in the results.
-//   - warkdirs: Optional functions that can be applied to each directory encountered during the search.
+//   - walkdirs: Optional functions that can be applied to each directory encountered during the search.
 //
 // Returns:
 //   - matches: A slice of strings containing the paths of the matching files and directories.
-func FindFilesMatchName(root, pattern string, maxdeep int, matchfile, matchdir bool, warkdirs ...WarkdirFunc) (matches []string) {
+func FindFilesMatchName(root, pattern string, maxdeep int, matchfile, matchdir bool, walkdirs ...WarkdirFunc) (matches []string) {
 	matchFunc := func(pattern, relpath string) bool {
 		if match, err := filepath.Match(pattern, filepath.Base(relpath)); err == nil && match {
 			return true
 		}
 		return false
 	}
-	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, warkdirs...)
+	return FindFilesMatchPathFromRoot(root, pattern, maxdeep, matchfile, matchdir, matchFunc, walkdirs...)
 }
 
 func GetDrives() ([]string, error) {

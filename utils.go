@@ -67,7 +67,8 @@ func ConvertPathSeparators(frompath, reference string) string {
 	return frompath
 }
 
-func JointSmart(fallbackPathSeparators string, elem ...string) string {
+// JoinSmart joins path elements using the detected path separator from existing elements.
+func JoinSmart(fallbackPathSeparators string, elem ...string) string {
 	retpath := ""
 	firstPathSeparators := ""
 	func() {
@@ -194,6 +195,11 @@ func PathHasSubpath(subpath, PATH string) bool {
 // both "/" and "\" are treated as separators, output always uses "/".
 func NormalizeSeparators(p string) string {
 	return strings.ReplaceAll(p, "\\", "/")
+}
+
+// Deprecated: Use JoinSmart instead.
+func JointSmart(fallbackPathSeparators string, elem ...string) string {
+	return JoinSmart(fallbackPathSeparators, elem...)
 }
 
 // BaseSmart returns the last element of the path, handling both '/' and '\'
