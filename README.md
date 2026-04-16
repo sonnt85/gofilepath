@@ -82,3 +82,8 @@ go get github.com/sonnt85/gofilepath@latest
 - **Local filesystem paths** -> standard functions (`Base`, `Join`, `Rel`)
 - **Remote/network paths** (CLI -> server, different OS) -> cross-platform functions (`BaseSmart`, `JoinSlash`, `RelSlash`)
 - **Preserving user's separator style** -> `JointSmart`, `RelSmart`
+
+## Author
+
+**sonnt85** — [thanhson.rf@gmail.com](mailto:thanhson.rf@gmail.com)
+
