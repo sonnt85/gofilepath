@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -175,6 +176,108 @@ func PathHasSubpath(subpath, PATH string) bool {
 	pashListSeparator := GetPathSeparator(PATH)
 	for _, val := range strings.Split(PATH, string(pashListSeparator)) {
 		if _, err := os.Stat(filepath.Join(val, subpath)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// --- Cross-platform path functions ---
+// These functions handle both '/' and '\' as separators regardless of the
+// current OS. Useful for manipulating remote paths where the CLI OS may
+// differ from the target OS (e.g., Linux CLI → Windows agent or vice versa).
+// All output uses '/' as separator, which is accepted by Go's os package
+// on every platform including Windows.
+
+// NormalizeSeparators replaces all backslashes with forward slashes.
+// This is the foundation for cross-platform path manipulation:
+// both "/" and "\" are treated as separators, output always uses "/".
+func NormalizeSeparators(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
+// BaseSmart returns the last element of the path, handling both '/' and '\'
+// as separators regardless of the current OS.
+//
+//	BaseSmart("C:\\Users\\file.txt")  → "file.txt"  (even on Linux)
+//	BaseSmart("/home/user/file.txt")  → "file.txt"  (even on Windows)
+//	BaseSmart("")                     → "."
+func BaseSmart(p string) string {
+	return path.Base(NormalizeSeparators(p))
+}
+
+// DirSmart returns all but the last element of the path, handling both
+// '/' and '\' as separators. Output uses '/'.
+//
+//	DirSmart("C:\\Users\\file.txt")  → "C:/Users"
+//	DirSmart("/home/user/file.txt")  → "/home/user"
+func DirSmart(p string) string {
+	return path.Dir(NormalizeSeparators(p))
+}
+
+// SplitSmart splits path into directory and file components, handling both
+// '/' and '\' as separators. Output uses '/'.
+func SplitSmart(p string) (dir, file string) {
+	return path.Split(NormalizeSeparators(p))
+}
+
+// ExtSmart returns the file extension, handling both separators.
+func ExtSmart(p string) string {
+	return path.Ext(NormalizeSeparators(p))
+}
+
+// BaseNoExtSmart returns the filename without extension, handling both separators.
+//
+//	BaseNoExtSmart("C:\\Users\\archive.tar.gz") → "archive.tar"
+func BaseNoExtSmart(p string) string {
+	base := BaseSmart(p)
+	return strings.TrimSuffix(base, ExtSmart(p))
+}
+
+// JoinSlash joins path elements using '/' separator, normalizing any '\' in
+// the input elements. Suitable for constructing remote/network paths.
+//
+//	JoinSlash("/remote/dir", "sub\\folder", "file.txt") → "/remote/dir/sub/folder/file.txt"
+//	JoinSlash("C:\\Users", "docs")                      → "C:/Users/docs"
+func JoinSlash(elem ...string) string {
+	normalized := make([]string, len(elem))
+	for i, e := range elem {
+		normalized[i] = NormalizeSeparators(e)
+	}
+	return path.Join(normalized...)
+}
+
+// RelSlash returns a relative path from basepath to targpath, handling both
+// separators in input. Output uses '/'.
+//
+//	RelSlash("C:\\Users\\home", "C:\\Users\\home\\docs\\file.txt") → "docs/file.txt"
+func RelSlash(basepath, targpath string) (string, error) {
+	rel, err := filepath.Rel(
+		filepath.FromSlash(NormalizeSeparators(basepath)),
+		filepath.FromSlash(NormalizeSeparators(targpath)),
+	)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+// CleanSmart cleans a path handling both separators. Output uses '/'.
+func CleanSmart(p string) string {
+	return path.Clean(NormalizeSeparators(p))
+}
+
+// IsAbsSmart checks if a path is absolute, handling both separator styles
+// and Windows drive letters (e.g., "C:/", "C:\").
+func IsAbsSmart(p string) bool {
+	normalized := NormalizeSeparators(p)
+	if path.IsAbs(normalized) {
+		return true
+	}
+	// Check Windows drive letter: "C:/" or "C:"
+	if len(normalized) >= 2 && normalized[1] == ':' {
+		c := normalized[0]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
 			return true
 		}
 	}
