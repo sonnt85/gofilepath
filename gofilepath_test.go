@@ -1,16 +1,17 @@
 package gofilepath
 
 import (
-	"fmt"
 	"path/filepath"
 	"testing"
 )
 
 func TestFromSlashSmart(t *testing.T) {
-	fmt.Println(filepath.ToSlash(_toSlashSmart("C/Windows/System32/AcGenral.dll")))
+	const in = "C/Windows/System32/AcGenral.dll"
+	const want = "C:/Windows/System32/AcGenral.dll"
+	if got := filepath.ToSlash(_toSlashSmart(in)); got != want {
+		t.Errorf("ToSlash(_toSlashSmart(%q)) = %q, want %q", in, got, want)
+	}
 }
-
-// "C:/Windows/System32/AcGenral.dll"
 
 func TestNormalizeSeparators(t *testing.T) {
 	tests := []struct {
